@@ -1,0 +1,16 @@
+{
+  "name": "Speak Mastery",
+  "short_name": "Speak",
+  "description": "A 90-day interactive course in confident speaking, presence and influence.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#14121C",
+  "theme_color": "#1C1828",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
