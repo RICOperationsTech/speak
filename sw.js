@@ -1,5 +1,5 @@
 /* Speak Mastery service worker: makes the app load instantly and work offline. */
-const CACHE = "speak-mastery-v2";
+const CACHE = "speak-mastery-v3";
 const CORE = [
   "./",
   "./index.html",

@@ -289,9 +289,9 @@ details.fw .body{padding:0 16px 14px}
 .rate button{flex:1;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:9px 0;font-weight:700}
 .rate button[aria-pressed="true"]{background:var(--glow);border-color:var(--glow);color:#2A1A00}
 .bars{display:grid;gap:10px}
-.bar{display:grid;grid-template-columns:62px 1fr 74px;gap:10px;align-items:center;font-size:15px}
+.bar{display:grid;grid-template-columns:96px 1fr 64px;gap:10px;align-items:center;font-size:15px}
 .bar .track{height:14px;border-radius:99px;background:var(--bg);border:1px solid var(--line);overflow:hidden}
-.bar .fill{height:100%;background:var(--glow);border-radius:99px}
+.bar .fill{display:block;height:100%;background:var(--glow);border-radius:99px}
 .bar .v{text-align:right;font-variant-numeric:tabular-nums}
 
 /* Quiz */
@@ -1244,13 +1244,14 @@ function sessionBlocks(x, mins, rel){
   if (mins >= 30) B.push({k:"recall", t:"Recall", m:2});
   if (!mini) B.push({k:"learn", t:"Learn the idea", m:6, core:true});
   if (!mini) B.push({k:"tryit", t:"Try it", m:3});
-  if (mins >= 45) B.push({k:"deepen", t:VIDEOS[d] ? "Watch like a coach" : "Go deeper", m:VIDEOS[d] ? Math.max(10, Math.min(20, VIDEOS[d].min)) : 10});
+  if (mins >= 45) B.push({k:"deepen", t:VIDEOS[d] ? "Watch like a coach" : "Go deeper", m:VIDEOS[d] ? Math.max(10, Math.min(20, VIDEOS[d].min||10)) : 10});
   B.push({k:"drill", t:mini ? "One quick drill" : "Drill it out loud", m:mini ? 3 : 9, core:true});
-  if (mins >= 45) B.push({k:"impromptu", t:"Impromptu round", m:5});
-  if (mins >= 30) B.push({k:"coach", t:"Coach check", m:5});
-  if (mins >= 30) B.push({k:"levelup", t:"Level up", m:5});
+  if (mins >= 30) B.push({k:"smart", t:"Smart rep", m:5});
+  if (mins >= 30) B.push({k:"levelup", t:"Level up", m:3});
+  if (mins >= 45) B.push({k:"coach", t:"Coach check", m:5});
+  if (mins >= 60) B.push({k:"impromptu", t:"Impromptu round", m:5});
   if (mins >= 60) B.push({k:"roleplay", t:rel && rel.rp ? "AI roleplay" : "Stage rep", m:10});
-  if (mins >= 60) B.push({k:"artic", t:"Articulation lab", m:5});
+  if (mins >= 90) B.push({k:"artic", t:"Articulation lab", m:5});
   if (mins >= 90 && d < TOTAL_DAYS) B.push({k:"ahead", t:"Get ahead", m:15});
   return B;
 }
@@ -1258,6 +1259,7 @@ function blockBody(k, x, rel, mini){
   const d = x.d;
   if (k === "warm") { const v = WARMUPS[d % WARMUPS.length]; return `<p class="sub" style="margin:0 0 6px">${v.n}</p><ol class="steps">${v.s.map(w=>`<li>${w}</li>`).join("")}</ol>${[TWISTERS[d % TWISTERS.length], TWISTERS[(d*7+3) % TWISTERS.length]].map(t=>`<div class="twister">${t}</div>`).join("")}`; }
   if (k === "recall") return `<div id="recallBox">${recallHTML()}</div>`;
+  if (k === "smart") { const sp = smartPick(d, gymFor(x)[0]); return `<p style="margin:0 0 6px">${sp.w ? `Your coach sees <b>${SKILLNAME[sp.k]}</b> as your weakest skill right now (${sp.w.v}/100, from ${sp.w.cnt} signals). This rep targets it.` : "Calibrate your coach: this recording gives it its first real data about how you speak."}</p><p class="note" style="margin:0 0 8px">${sp.w ? SMART_TIP[sp.k] : "Speak for 30 seconds or more about anything you like."}</p><div id="smartInline"></div>`; }
   if (k === "tryit") return `<p class="sub" style="margin:0 0 8px">${gymLabel(gymFor(x))}. Interactive, about four minutes.</p><div id="gymInline"></div>`;
   if (k === "learn") {
     const deepOpen = ((state.pref && state.pref.mins) || 20) >= 45;
@@ -1589,11 +1591,12 @@ const KEY = "speak30-progress-v1";
 const $ = (s,r=document)=>r.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const iso = d => d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
-let state = {done:{}, doneAt:{}, steps:{}, scores:{}, notes:{}, quiz:{}, watched:{}, ladder:{}, proj:{}, mc:{}, reps:[], pref:{mins:20, remind:"21:00"}, srs:{}, mini:{}, gym:{}, delivery:[], human:[], crit:{}, profile:{sit:"Office or corporate job", goals:["Presentations or meetings","Job interviews","Networking or social events"], events:[]}, coach:0};
+let state = {done:{}, doneAt:{}, steps:{}, scores:{}, notes:{}, quiz:{}, watched:{}, ladder:{}, proj:{}, mc:{}, reps:[], pref:{mins:20, remind:"21:00"}, srs:{}, mini:{}, gym:{}, delivery:[], human:[], crit:{}, ana:[], report:null, profile:{sit:"Office or corporate job", goals:["Presentations or meetings","Job interviews","Networking or social events"], events:[]}, coach:0};
 try { const raw = localStorage.getItem(KEY); if (raw) Object.assign(state, JSON.parse(raw)); } catch(e) {}
 if (!Array.isArray(state.reps)) state.reps = [];
 if (!Array.isArray(state.delivery)) state.delivery = [];
 if (!Array.isArray(state.human)) state.human = [];
+if (!Array.isArray(state.ana)) state.ana = [];
 ["done","doneAt","steps","scores","notes","quiz","watched","ladder","proj","mc","pref","srs","mini","profile","gym","crit"].forEach(k=>{ if (!state[k] || typeof state[k] !== "object") state[k] = {}; });
 state.coach = +state.coach || 0;
 
@@ -1613,7 +1616,7 @@ function xp(){
   x += Math.min(state.reps.length, 150) * 5;
   x += Object.keys(state.mc).length * 60;
   PROJECTS.forEach(p=>{ if (projDone(p)) x += 150; });
-  Object.values(state.steps).forEach(st=>{ ["recall","tryit","deepen","impromptu","coach","levelup","roleplay","artic","ahead"].forEach(k=>{ if (st && st[k]) x += 10; }); });
+  Object.values(state.steps).forEach(st=>{ ["recall","tryit","smart","deepen","impromptu","coach","levelup","roleplay","artic","ahead"].forEach(k=>{ if (st && st[k]) x += 10; }); });
   Object.values(state.srs).forEach(r=>{ x += (r.b||0) * 2; });
   const G = state.gym || {};
   x += Object.values(G.scen||{}).reduce((a,v)=>a+v*10,0) + (gymCount("spot") + gymCount("order") + gymCount("rewrite") + gymCount("meter"))*10 + Math.min(gymCount("dice"),60)*5 + gymCount("tele")*5;
@@ -1762,6 +1765,7 @@ function renderToday(){
   const fbt = $("#focusBtn"); if (fbt) fbt.onclick = toggleFocus;
   bindListen(el);
   const gi = $("#gymInline"); if (gi) mountGym(gi, gymFor(x));
+  const si = $("#smartInline"); if (si) mountGym(si, smartPick(d, gymFor(x)[0]).g);
   const so = $("#startOk"); if (so) so.onclick = ()=>{ state.pref.onboarded = true; save(); renderToday(); };
   const no = $("#nudgeOff"); if (no) no.onclick = ()=>{ state.profile = {...(state.profile||{}), dismissNudge:true}; save(); renderToday(); };
   const imp = $("#impNew"); if (imp) imp.onclick = ()=>{ const all = PROMPTS.everyday.concat(PROMPTS.work); $("#impP").textContent = all[Math.floor(Math.random()*all.length)]; };
@@ -2100,7 +2104,7 @@ function mergeState(d){
   if (d.profile) state.profile = Object.assign({}, d.profile, state.profile && state.profile.title ? state.profile : {});
   if (d.pref) state.pref = Object.assign({}, d.pref, state.pref);
   state.coach = Math.max(state.coach, +d.coach || 0);
-  state.delivery = unionById(state.delivery, d.delivery); state.human = unionById(state.human, d.human);
+  state.delivery = unionById(state.delivery, d.delivery); state.human = unionById(state.human, d.human); if (Array.isArray(d.ana) && !state.ana.length) state.ana = d.ana; if (d.report && !state.report) state.report = d.report;
 }
 function restoreFrom(text, out){
   try {
@@ -2728,6 +2732,140 @@ function celebrate(d){
   const end = ()=>{ o.classList.add("out"); setTimeout(()=>o.remove(), 450); };
   o.onclick = end; setTimeout(end, 2000);
 }
+/* =========================================================
+   ADAPTIVE COACH: learns from your results and targets your weakest skill
+   ========================================================= */
+const SKILLS = [["calm","Calm"],["voice","Voice"],["clarity","Clarity"],["engage","Engagement"],["presence","Presence"],["influence","Influence"]];
+const SKILLNAME = Object.fromEntries(SKILLS);
+const SCEN_SKILL = {interrupted:"presence",blank:"calm",weakness:"presence",networking:"engage",pushback:"influence",qa:"calm",surprise:"clarity",sayno:"influence",feedback:"influence",opening:"engage",negotiation:"influence",upset:"influence"};
+const SMART = {calm:[["scen","blank"],["scen","qa"],["tele",0]],voice:[["delivery"],["tele",1],["meter"]],clarity:[["rewrite",0],["order",0],["rewrite",1],["spot",0]],engage:[["scen","opening"],["tele",0],["dice"]],presence:[["scen","interrupted"],["spot",3],["scen","weakness"]],influence:[["scen","pushback"],["scen","negotiation"],["rewrite",3]]};
+const SMART_TIP = {calm:"Three physiological sighs first, then go.",voice:"Stand up, breathe from the belly and aim your voice at the far wall.",clarity:"Decide your one-sentence point before you start.",engage:"Open with something they can picture or feel.",presence:"Downward endings, no hedges, stillness between gestures.",influence:"Start with their concern, then make yes easy."};
+function dComp(e){
+  return {sP: e.ppm>=4 && e.ppm<=16 ? 1 : e.ppm>=2 && e.ppm<=22 ? .64 : .32,
+          sV: e.sd==null ? null : e.sd>=3 ? 1 : e.sd>=2 ? .72 : e.sd>=1.5 ? .48 : .24,
+          sF: e.fade<15 ? 1 : e.fade<30 ? .68 : e.fade<50 ? .4 : .16,
+          sS: e.snr>=25 ? 1 : e.snr>=18 ? .72 : e.snr>=12 ? .44 : .2};
+}
+function skillMap(){
+  const acc = {}; SKILLS.forEach(([k])=>acc[k] = {sum:0, w:0, n:0, src:new Set()});
+  const add = (k,v,w,src)=>{ if (v==null || isNaN(v)) return; acc[k].sum += v*w; acc[k].w += w; acc[k].n++; acc[k].src.add(src); };
+  const cps = CHECKS.filter(d=>{ const s = state.scores[d]; return s && DIMS.some(m=>s[m.k]); });
+  if (cps.length){ const s = state.scores[cps[cps.length-1]]; ["calm","voice","clarity","engage","presence"].forEach(k=>{ if (s[k]) add(k, s[k]/5, 3, "checkpoint scores"); }); }
+  (state.delivery||[]).slice(-3).forEach(e=>{ const c = dComp(e); add("clarity",c.sP,1,"Delivery lab"); add("calm",c.sP,1,"Delivery lab"); if (c.sV!=null){ add("voice",c.sV,1,"Delivery lab"); add("engage",c.sV,1,"Delivery lab"); } add("voice",c.sF,1,"Delivery lab"); add("voice",c.sS,1,"Delivery lab"); add("presence",c.sS,1,"Delivery lab"); });
+  (state.human||[]).slice(-5).forEach(h=>{ if (h.clear) add("clarity",h.clear/5,2,"human feedback"); if (h.conf){ add("presence",h.conf/5,2,"human feedback"); add("calm",h.conf/5,1,"human feedback"); } if (h.eng) add("engage",h.eng/5,2,"human feedback"); if (h.got===1 || h.got===0) add("clarity",h.got,2,"human feedback"); });
+  Object.entries((state.gym||{}).scen||{}).forEach(([id,v])=>{ const k = SCEN_SKILL[id]; if (k) add(k, v/2, 1, "scenarios"); });
+  const g = state.gym || {};
+  const sp = Object.keys(g.spot||{}).length; if (sp) add("presence", Math.min(1, sp/4), 1, "spot the weak words");
+  const od = Object.keys(g.order||{}).length; if (od) add("clarity", Math.min(1, od/4), 1, "framework puzzles");
+  const qmap = {1:["calm","voice"],2:["clarity"],3:["engage"],4:["influence"]};
+  Object.entries(state.quiz||{}).forEach(([w,q])=>(qmap[w]||[]).forEach(k=>add(k, q/5, 1, "weekly tests")));
+  const r10 = (state.reps||[]).slice(-10); if (r10.length >= 3){ const avg = r10.reduce((a,r)=>a+r.c,0)/r10.length/5; add("calm",avg,2,"real-world reps"); add("presence",avg,1,"real-world reps"); }
+  (state.ana||[]).slice(-5).forEach(a=>{ if (a.w >= 30){ add("clarity", Math.max(0, 1 - (a.f/a.w*100)/8), 1, "AI coach analyses"); add("presence", Math.max(0, 1 - (a.h/a.w*100)/6), 1, "AI coach analyses"); } });
+  return SKILLS.map(([k,n])=>({k, n, v: acc[k].w ? Math.round(acc[k].sum/acc[k].w*100) : null, w: acc[k].w, cnt: acc[k].n, src: [...acc[k].src]}));
+}
+function weakest(){ const m = skillMap().filter(s=>s.v!==null && s.w>=2); if (!m.length) return null; return m.sort((a,b)=>a.v-b.v)[0]; }
+function smartPick(d, avoidKind){
+  const w = weakest(), k = w ? w.k : "voice";
+  const list = w ? SMART[k] : [["delivery"]];
+  let g = list[d % list.length]; if (g[0] === avoidKind && list.length > 1) g = list[(d+1) % list.length];
+  if (g[0] === avoidKind) g = ["dice"];
+  return {w, k, g};
+}
+function skillRadar(map){
+  const cx = 170, cy = 150, R = 105, n = map.length;
+  const pt = (i,v)=>{ const a = (-90 + i*360/n)*Math.PI/180; return [cx + Math.cos(a)*R*v, cy + Math.sin(a)*R*v]; };
+  let g = "";
+  [0.25,0.5,0.75,1].forEach(l=>{ g += `<polygon points="${map.map((_,i)=>pt(i,l).join(",")).join(" ")}" fill="none" stroke="var(--line)"/>`; });
+  map.forEach((s,i)=>{ const [x,y] = pt(i,1); g += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="var(--line)"/>`; const [lx,ly] = pt(i,1.22); g += `<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="middle" font-size="13" fill="var(--muted)" font-family="Atkinson Hyperlegible, sans-serif">${s.n}</text>`; });
+  g += `<polygon points="${map.map((s,i)=>pt(i, s.v===null ? 0.04 : Math.max(0.04, s.v/100)).join(",")).join(" ")}" fill="rgba(245,181,71,.32)" stroke="var(--glow)" stroke-width="2.5"/>`;
+  map.forEach((s,i)=>{ if (s.v!==null){ const [x,y] = pt(i, Math.max(0.04, s.v/100)); g += `<circle cx="${x}" cy="${y}" r="4" fill="var(--glow)"/>`; } });
+  return `<svg class="radar" viewBox="0 0 340 300" role="img" aria-label="Your six core speaking skills">${g}</svg>`;
+}
+function skillMapHTML(){
+  const map = skillMap(), known = map.filter(s=>s.v!==null && s.w>=2);
+  const strong = known.length ? [...known].sort((a,b)=>b.v-a.v)[0] : null, weak = weakest();
+  return `<div class="card"><h3>Your skill map</h3>
+    <p class="sub">Your coach combines everything you do here (checkpoints, the Delivery lab, scenarios, tests, real-world reps and human feedback) into six core skills, and targets the weakest one in your Smart rep.</p>
+    ${known.length ? `<div class="radarwrap">${skillRadar(map)}</div>` : ""}
+    <div class="bars" style="margin-top:8px">${map.map(s=>`<div class="bar"><span>${s.n}</span><span class="track"><span class="fill" style="width:${s.v===null?0:s.v}%"></span></span><span class="v">${s.v===null?"–":s.v}</span></div>`).join("")}</div>
+    ${known.length ? `<p class="note" style="margin:10px 0 0">${strong ? `Strongest: <b>${strong.n}</b>. ` : ""}${weak ? `Focus: <b>${weak.n}</b>. Your Smart rep on 30+ minute days targets it.` : ""}</p>`
+      : `<p class="note" style="margin:10px 0 0">Not enough data yet. Record a Delivery lab session, score a checkpoint, or ace a scenario, and your map comes to life.</p>`}
+    <details class="deeper"><summary>How your coach scores you</summary><ul class="why">${map.map(s=>`<li><b>${s.n}:</b> ${s.src.length ? s.src.join(", ") : "no signals yet"}${s.cnt ? ` (${s.cnt} signal${s.cnt>1?"s":""})` : ""}</li>`).join("")}</ul><p class="note" style="margin:6px 0 0">Recent results count more than old ones. Scores are estimates to guide practice, not a verdict.</p></details>
+  </div>`;
+}
+
+/* Coach report (AI) */
+async function coachReport(){
+  const box = $("#reportBox"); if (!box || !sampleFn) return;
+  const map = skillMap().map(s=>`${s.n}: ${s.v===null ? "no data yet" : s.v + "/100"}`).join("; ");
+  const del = (state.delivery||[]).slice(-6).map(e=>e.score).join(", ") || "none yet";
+  const hum = (state.human||[]).slice(-3).map(h=>`clear ${h.clear||"-"}/5, confident ${h.conf||"-"}/5, engaging ${h.eng||"-"}/5${h.got===1?", could repeat the point":h.got===0?", could not repeat the point":""}${h.change?`, suggested change: ${h.change}`:""}`).join(" | ") || "none yet";
+  const notes = Object.entries(state.notes).filter(([k,v])=>v && v.trim()).sort((a,b)=>+a[0]-+b[0]).slice(-5).map(([k,v])=>`Day ${k}: ${v.trim().slice(0,220)}`).join("\n") || "none yet";
+  const r10 = state.reps.slice(-10), avg = r10.length ? (r10.reduce((a,r)=>a+r.c,0)/r10.length).toFixed(1) : "n/a";
+  const prompt = `You are an elite public speaking coach writing a short, personal progress report for your student inside a 90-day course.
+
+Data (use only this; never invent numbers):
+- Days completed: ${doneCount()} of 90. Current day: ${firstOpenDay()}. Streak: ${streak()} days.
+- Skill map: ${map}.
+- Delivery lab scores, oldest to newest: ${del}.
+- Real-world reps logged: ${state.reps.length}; average confidence of the last 10: ${avg}/5.
+- Courage ladder rungs climbed: ${Object.keys(state.ladder).length} of 12. Masterclasses done: ${Object.keys(state.mc).length} of ${MC.length}.
+- Human feedback: ${hum}.
+- Recent journal entries:
+${notes}
+${profileText()}
+
+Write the report in plain text (no markdown symbols), under 230 words, with these five labelled sections, each starting on a new line:
+Where you are:
+What’s improving:
+What’s holding you back:
+Your focus for next week: (three specific actions that use this course’s features, such as the Delivery lab, a named scenario or masterclass, the courage ladder, or the feedback partner)
+One thing to remember:
+Be warm, direct and specific. If the data is thin, say so and tell them exactly what to do to give you better data.`;
+  box.innerHTML = `<div class="rewrite" style="white-space:pre-wrap">Writing your report…</div>`;
+  const out = box.firstChild; const btn = $("#reportBtn"); if (btn) btn.disabled = true;
+  try {
+    const {text} = await sampleFn(prompt, {cache:false, onText:({text})=>{ out.textContent = text; }});
+    out.textContent = text; state.report = {at: iso(new Date()), text}; state.coach++; save(); renderHero();
+  } catch(e){ out.textContent = errCopy(e); }
+  finally { if (btn) btn.disabled = false; }
+}
+function reportHTML(){
+  const r = state.report;
+  return `<div class="card"><h3>Your coach report</h3>
+    <p class="sub">A personal read of your progress, patterns from your journal and a focused plan for next week. Best once a week, after your Sunday review.</p>
+    ${aiReady ? `<button class="btn amber" id="reportBtn">${r ? "Write a new report" : "Write my coach report"}</button>` : `<p class="note" style="margin:0">Coach reports use AI, which runs in the claude.ai version of this course.</p>`}
+    <div id="reportBox">${r ? `<div class="rewrite" style="white-space:pre-wrap;margin-top:10px"></div><p class="note" style="margin:6px 0 0">Written ${esc(r.at)}</p>` : ""}</div></div>`;
+}
+
+/* Talk mode: spoken conversation with the AI coach */
+const SRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+let talkOn = false, srInst = null;
+function setTalkStatus(t){ const s = $("#talkStatus"); if (s) s.textContent = t; }
+function speakThen(text, cb){
+  if (!canSpeak) { cb && cb(); return; }
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(String(text).replace(/[“”*]/g,"")); u.rate = 1; u.lang = "en-US";
+  u.onend = ()=>cb && cb(); u.onerror = ()=>cb && cb();
+  speechSynthesis.speak(u); setTalkStatus("Coach is speaking…");
+}
+function listenOnce(){
+  if (!SRec || !talkOn) return;
+  try { srInst && srInst.abort(); } catch(e){}
+  const rec = new SRec(); srInst = rec; rec.lang = "en-US"; rec.interimResults = true; rec.continuous = false;
+  let final = "";
+  rec.onresult = e=>{ let interim = ""; for (let i=e.resultIndex; i<e.results.length; i++){ if (e.results[i].isFinal) final += e.results[i][0].transcript; else interim += e.results[i][0].transcript; } const box = $("#chatIn"); if (box) box.value = (final + " " + interim).trim(); };
+  rec.onerror = e=>{ if (e.error === "not-allowed" || e.error === "service-not-allowed") { talkOn = false; updateTalkBtn(); setTalkStatus("The microphone is blocked here. Use your keyboard’s mic instead."); } };
+  rec.onend = ()=>{ if (!talkOn) return; const t = final.trim(); if (t) { $("#chatIn").value = ""; sendChat(t); setTalkStatus("Thinking…"); } else setTalkStatus("I didn’t catch that. Tap the mic to try again."); };
+  try { rec.start(); setTalkStatus("Listening… speak now"); } catch(e){ setTalkStatus("Couldn’t start the microphone."); }
+}
+function updateTalkBtn(){ const b = $("#talkBtn"); if (b) { b.textContent = talkOn ? "🎙️ Talk mode: on" : "🎙️ Talk mode"; b.setAttribute("aria-pressed", String(talkOn)); } }
+function toggleTalk(){
+  talkOn = !talkOn; updateTalkBtn();
+  if (talkOn) { setTalkStatus("Talk mode on. Your coach will speak, then listen for your reply."); listenOnce(); }
+  else { try { srInst && srInst.abort(); } catch(e){} if (canSpeak) speechSynthesis.cancel(); setTalkStatus(""); }
+}
+
 /* ---------- Installable app ---------- */
 let deferredInstall = null;
 window.addEventListener("beforeinstallprompt", e=>{ e.preventDefault(); deferredInstall = e; try { renderMe(); } catch(err){} });
@@ -2738,7 +2876,7 @@ function installCardHTML(){
   return `<div class="card" style="border-left:4px solid var(--glow)"><h3>Install the app</h3>
     <p class="sub">Put Speak Mastery on your home screen. It opens full screen like any app and works without internet.</p>
     ${deferredInstall ? `<button class="btn amber" id="installBtn">Install Speak Mastery</button>` :
-    `<p class="note" style="margin:0">Android (Chrome): tap the ⋮ menu, then “Install app” or “Add to Home screen.”<br>iPhone (Safari): tap the Share button, then “Add to Home Screen.”</p>`}</div>`;
+    `<p class="note" style="margin:0">Samsung Internet: tap the Install icon in the address bar, or ☰ → Add page to → Apps screen.<br>Chrome: ⋮ → Install app.<br>iPhone (Safari): Share → Add to Home Screen.</p>`}</div>`;
 }
 function renderPlan(){
   const el = $("#plan");
@@ -2878,11 +3016,11 @@ function renderCoach(){
 
     <div class="card">
       <h3>Ask your coach anything</h3>
-      <p class="sub">“How do I stop my voice shaking?” “Help me open my talk on climate.” “Rewrite this intro so it sounds confident.”</p>
+      <p class="sub">Type, dictate, or turn on Talk mode to have a spoken conversation. “How do I stop my voice shaking?” “Help me open my talk on climate.” “Rewrite this intro so it sounds confident.”</p>
       <div id="roleBanner"></div>
       <div class="chatlog" id="chatlog"></div>
       <textarea id="chatIn" style="min-height:80px" placeholder="Type or dictate your question…"></textarea>
-      <div class="row" style="margin-top:8px"><button class="btn" id="chatGo" disabled>Ask</button><button class="btn ghost small" id="chatStop" hidden>Stop</button><button class="btn ghost small" id="chatClear">Clear chat</button></div>
+      <div class="row" style="margin-top:8px"><button class="btn" id="chatGo" disabled>Ask</button><button class="btn ghost small" id="chatStop" hidden>Stop</button><button class="btn ghost small" id="chatClear">Clear chat</button>${SRec ? `<button class="btn ghost small" id="talkBtn" aria-pressed="false">🎙️ Talk mode</button>` : ""}</div><p class="note" id="talkStatus" style="margin:6px 0 0">${SRec ? "" : ""}</p>
     </div>`;
 
   let ctype = "Free talk", sparType = "Job interview";
@@ -2893,6 +3031,7 @@ function renderCoach(){
     const t = $("#ctext").value;
     if (!t.trim()) { $("#cOut").innerHTML = `<p class="note">Dictate or paste something first.</p>`; return; }
     const a = analyze(t, +$("#csecs").value || 0);
+    state.ana = (state.ana || []).concat([{at:iso(new Date()), w:a.words, f:a.fillers, h:a.hedges}]).slice(-30);
     state.coach++; save(); renderHero();
     $("#cOut").innerHTML = `
       <div class="stats">
@@ -2971,6 +3110,7 @@ Give at most 3 fixes.`;
   renderChat(); renderRoleBanner();
   $("#chatGo").onclick = ()=>{ const q = $("#chatIn").value.trim(); if (!q) return; $("#chatIn").value = ""; sendChat(q); };
   $("#chatClear").onclick = ()=>{ chatTurns = []; rolePlay = null; renderChat(); renderRoleBanner(); };
+  const tb2 = $("#talkBtn"); if (tb2) tb2.onclick = toggleTalk;
   applyAI();
 }
 let rolePlay = null;
@@ -2990,6 +3130,7 @@ async function sendChat(q, hidden){
   try {
     const {text} = await sampleFn(turns, {signal:aiCtl.signal, cache:false, onText:({text})=>{ chatTurns[chatTurns.length-1].content = text; updateLastMsg(text); }});
     chatTurns[chatTurns.length-1].content = text; updateLastMsg(text);
+    if (talkOn) speakThen(text, ()=>{ if (talkOn) listenOnce(); });
     state.coach++; save(); renderHero();
   } catch(e) {
     const keep = e && e.text ? e.text : "";
@@ -3218,7 +3359,8 @@ function renderProgress(){
     </div>
     <p class="note" style="margin:0">Earn XP for each day (100), scored checkpoint (50), test passed (75), reflection (20), coach session (15), video (10), delivery recording (15), human feedback (40), real-world rep (5), courage rung (30), masterclass (60) and finished project (150). ${r.next ? (r.next[0]-x) + " XP to " + r.next[1] + "." : "You’ve reached the top rank."}</p></div>`;
 
-  h += `<div class="card"><h3>Your skill shape</h3>
+  h += skillMapHTML() + reportHTML();
+  h += `<div class="card"><h3>Checkpoint shape</h3>
     ${rad.scored.length ? `<div class="radarwrap">${rad.svg}</div><div class="legend"><span><i style="background:var(--indigo)"></i>Day ${rad.scored[0]}</span>${rad.scored.length>1?`<span><i style="background:var(--glow)"></i>Day ${rad.scored[rad.scored.length-1]}</span>`:""}</div>`
       : `<p class="note">Score your Day 1 recording below and your skill shape appears here. Each checkpoint adds a new layer so you can see yourself grow.</p>`}
   </div>`;
@@ -3253,6 +3395,8 @@ function renderProgress(){
   h += `</div></div>`;
   el.innerHTML = h;
 
+  const rb = $("#reportBtn"); if (rb) rb.onclick = coachReport;
+  if (state.report) { const rbx = el.querySelector("#reportBox .rewrite"); if (rbx) rbx.textContent = state.report.text; }
   el.querySelectorAll("[data-cp]").forEach(c=>c.onclick = ()=>{ scoreDay = +c.dataset.cp; renderProgress(); });
   el.querySelectorAll(".rate button").forEach(b=>b.onclick = ()=>{
     const s = state.scores[scoreDay] = {...(state.scores[scoreDay]||{})};
@@ -3323,7 +3467,7 @@ document.addEventListener("keydown", e=>{ if (e.key === "Escape") closeSheet(); 
       Object.keys(d.scores || {}).forEach(k=>{ merged[k] = Object.assign({}, merged[k] || {}, d.scores[k]); });
       state.scores = merged;
       state.coach = Math.max(state.coach, +d.coach || 0);
-      state.delivery = unionById(state.delivery, d.delivery); state.human = unionById(state.human, d.human);
+      state.delivery = unionById(state.delivery, d.delivery); state.human = unionById(state.human, d.human); if (Array.isArray(d.ana) && !state.ana.length) state.ana = d.ana; if (d.report && !state.report) state.report = d.report;
       try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e) {}
       viewDay = firstOpenDay();
       renderAll();
